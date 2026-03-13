@@ -404,6 +404,96 @@
             font-size: 4rem;
             margin-bottom: 1rem;
         }
+
+        /* Filters Applied Section */
+        .filters-applied {
+            background: var(--surface);
+            border-radius: var(--border-radius);
+            padding: 1rem 1.5rem;
+            margin: -1rem auto 2rem;
+            max-width: 800px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            animation: fadeInUp 0.6s ease-out 0.1s both;
+        }
+
+        .filters-title {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 0.75rem;
+        }
+
+        .filters-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .filter-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            padding: 0.4rem 0.85rem;
+            background: rgba(99, 102, 241, 0.15);
+            border: 1px solid rgba(99, 102, 241, 0.3);
+            border-radius: 20px;
+            font-size: 0.85rem;
+            color: var(--text-primary);
+        }
+
+        .filter-tag-icon {
+            font-size: 0.75rem;
+        }
+
+        /* Insufficient Results Warning */
+        .results-warning {
+            background: rgba(251, 191, 36, 0.1);
+            border: 1px solid rgba(251, 191, 36, 0.3);
+            border-radius: var(--border-radius);
+            padding: 1rem 1.5rem;
+            margin: 0 auto 2rem;
+            max-width: 800px;
+            display: flex;
+            align-items: flex-start;
+            gap: 1rem;
+            animation: fadeInUp 0.6s ease-out 0.15s both;
+        }
+
+        .warning-icon {
+            font-size: 1.5rem;
+            flex-shrink: 0;
+        }
+
+        .warning-content {
+            flex: 1;
+        }
+
+        .warning-title {
+            font-weight: 600;
+            color: #fbbf24;
+            margin-bottom: 0.25rem;
+        }
+
+        .warning-text {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+
+        .warning-stats {
+            margin-top: 0.5rem;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .warning-stats span {
+            display: inline-block;
+            margin-right: 1rem;
+            padding: 0.25rem 0.5rem;
+            background: rgba(251, 191, 36, 0.1);
+            border-radius: 4px;
+        }
     </style>
 </head>
 <body>
@@ -435,6 +525,84 @@
             We found {{ total_recommendations|default:"15" }} amazing recommendations for you
         </p>
     </div>
+
+    <!-- Filters Applied -->
+    {% if filters_applied %}
+    <div class="filters-applied">
+        <div class="filters-title">🔧 Filters Applied</div>
+        <div class="filters-tags">
+            {% if filters_applied.n %}
+            <span class="filter-tag">
+                <span class="filter-tag-icon">📊</span>
+                {{ filters_applied.n }} results
+            </span>
+            {% endif %}
+            {% if filters_applied.min_year %}
+            <span class="filter-tag">
+                <span class="filter-tag-icon">📅</span>
+                From {{ filters_applied.min_year }}
+            </span>
+            {% endif %}
+            {% if filters_applied.max_year %}
+            <span class="filter-tag">
+                <span class="filter-tag-icon">📅</span>
+                Until {{ filters_applied.max_year }}
+            </span>
+            {% endif %}
+            {% if filters_applied.genres %}
+            <span class="filter-tag">
+                <span class="filter-tag-icon">🎭</span>
+                {{ filters_applied.genres }}
+            </span>
+            {% endif %}
+            {% if filters_applied.min_rating %}
+            <span class="filter-tag">
+                <span class="filter-tag-icon">⭐</span>
+                Rating ≥ {{ filters_applied.min_rating }}
+            </span>
+            {% endif %}
+            {% if filters_applied.exclude_same_company %}
+            <span class="filter-tag">
+                <span class="filter-tag-icon">🚫</span>
+                Different studio
+            </span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Insufficient Results Warning -->
+    {% if filtered_stats or total_recommendations < 5 %}
+    <div class="results-warning">
+        <span class="warning-icon">⚠️</span>
+        <div class="warning-content">
+            <div class="warning-title">Limited Results</div>
+            <div class="warning-text">
+                {% if total_recommendations == 0 %}
+                No movies matched all your filter criteria. Try relaxing some filters.
+                {% else %}
+                Only {{ total_recommendations }} recommendations found with current filters. Try adjusting your criteria for more results.
+                {% endif %}
+            </div>
+            {% if filtered_stats %}
+            <div class="warning-stats">
+                {% if filtered_stats.year > 0 %}
+                <span>📅 {{ filtered_stats.year }} filtered by year</span>
+                {% endif %}
+                {% if filtered_stats.rating > 0 %}
+                <span>⭐ {{ filtered_stats.rating }} filtered by rating</span>
+                {% endif %}
+                {% if filtered_stats.genre > 0 %}
+                <span>🎭 {{ filtered_stats.genre }} filtered by genre</span>
+                {% endif %}
+                {% if filtered_stats.company > 0 %}
+                <span>🏢 {{ filtered_stats.company }} filtered by company</span>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
 
     <!-- Main Content -->
     <main class="container">

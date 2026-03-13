@@ -767,13 +767,185 @@ curl "http://localhost:8000/api/health/"
   "status": "healthy",
   "movies_loaded": 100000,
   "model_dir": "./models",
-  "model_loaded": true
+  "model_loaded": true,
+  "cache_stats": {
+    "size": 42,
+    "max_size": 1000,
+    "ttl_seconds": 300
+  }
 }
 ```
 
 **Status Codes:**
 - `200 OK` - Service healthy
 - `503 Service Unavailable` - Service unhealthy
+
+---
+
+#### 5. Get Recommendations (JSON API)
+
+**Endpoint:** `GET /api/recommend/`
+
+**Description:** Get movie recommendations with advanced filtering options
+
+**Parameters:**
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| movie_title | string | Yes | Movie title to base recommendations on |
+| n | integer | No | Number of recommendations (default: 15) |
+| min_year | integer | No | Minimum release year |
+| max_year | integer | No | Maximum release year |
+| genres | string | No | Comma-separated list of genres to filter |
+| min_rating | float | No | Minimum rating (0-10) |
+| exclude_same_company | string | No | Set to "true" to exclude same production company |
+
+**Example Request:**
+```bash
+curl "http://localhost:8000/api/recommend/?movie_title=Inception&n=5&min_rating=7.0&genres=Action,Sci-Fi"
+```
+
+**Example Response (Success):**
+```json
+{
+  "status": "success",
+  "query_movie": "Inception",
+  "source_movie": {
+    "production": "Warner Bros.",
+    "rating": "8.8/10",
+    "genres": "Action, Science Fiction, Adventure",
+    "release_date": "2010-07-15"
+  },
+  "recommendations": [
+    {
+      "rank": 1,
+      "title": "The Dark Knight",
+      "release_date": "2008-07-16",
+      "production": "Warner Bros.",
+      "genres": "Action, Crime, Drama",
+      "rating": "9.0/10",
+      "votes": "30,000",
+      "similarity_score": 0.856,
+      "imdb_id": "tt0468569",
+      "poster_url": "https://image.tmdb.org/t/p/w500/qJ2tW6WMUDux911r6m7haRef0WH.jpg",
+      "google_link": "https://www.google.com/search?q=The+Dark+Knight+movie",
+      "imdb_link": "https://www.imdb.com/title/tt0468569"
+    }
+  ],
+  "total_recommendations": 5,
+  "filters_applied": {
+    "n": 5,
+    "min_rating": 7.0,
+    "genres": "Action,Sci-Fi"
+  },
+  "cached": true
+}
+```
+
+**Example Response (Movie Not Found):**
+```json
+{
+  "status": "error",
+  "error": "Movie 'NonexistentMovie' not found",
+  "suggestions": ["Inception", "Interstellar", "The Matrix"],
+  "query_movie": null,
+  "source_movie": null,
+  "recommendations": [],
+  "filters_applied": {
+    "n": 15
+  }
+}
+```
+
+**Example Response (Model Loading):**
+```json
+{
+  "status": "loading",
+  "error": "Model is still loading",
+  "progress": 65
+}
+```
+
+**Status Codes:**
+- `200 OK` - Request processed (check `status` field for success/error)
+- `400 Bad Request` - Missing required parameter `movie_title`
+- `503 Service Unavailable` - Model is still loading
+
+**Loading State:**
+When the model is not yet loaded, the API returns:
+- `status`: "loading"
+- `progress`: Current loading percentage (0-100)
+- `error`: "Model is still loading"
+
+---
+
+#### 6. Model Status
+
+**Endpoint:** `GET /api/model-status/`
+
+**Description:** Check model loading status and progress
+
+**Example Request:**
+```bash
+curl "http://localhost:8000/api/model-status/"
+```
+
+**Example Response (Loading):**
+```json
+{
+  "loaded": false,
+  "progress": 65,
+  "status": "loading"
+}
+```
+
+**Example Response (Ready):**
+```json
+{
+  "loaded": true,
+  "progress": 100,
+  "status": "ready",
+  "n_movies": 100000
+}
+```
+
+**Example Response (Error):**
+```json
+{
+  "loaded": false,
+  "progress": 0,
+  "status": "error",
+  "error": "Model files not found"
+}
+```
+
+**Status Values:**
+- `initializing` - Model loading not yet started
+- `loading` - Model is currently loading
+- `ready` - Model loaded and ready
+- `error` - Error occurred during loading
+
+---
+
+#### 7. Clear Cache
+
+**Endpoint:** `POST /api/cache/clear/`
+
+**Description:** Clear the recommendation cache (admin use)
+
+**Example Request:**
+```bash
+curl -X POST "http://localhost:8000/api/cache/clear/"
+```
+
+**Example Response:**
+```json
+{
+  "status": "success",
+  "message": "Cache cleared"
+}
+```
+
+**Note:** This endpoint is useful for clearing cached recommendations after model updates or for debugging purposes.
 
 ---
 

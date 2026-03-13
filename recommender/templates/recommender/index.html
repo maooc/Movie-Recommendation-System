@@ -202,6 +202,111 @@
             opacity: 0.7;
         }
 
+        /* Filter Section Styles */
+        .filter-section {
+            margin-bottom: 1.5rem;
+            padding: 1.25rem;
+            background: rgba(15, 23, 42, 0.5);
+            border-radius: var(--border-radius);
+            border: 1px solid var(--surface-light);
+        }
+
+        .filter-toggle {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            cursor: pointer;
+            padding: 0.5rem 0;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+
+        .filter-toggle:hover {
+            color: var(--text-primary);
+        }
+
+        .filter-toggle-icon {
+            transition: transform 0.3s ease;
+        }
+
+        .filter-toggle-icon.expanded {
+            transform: rotate(180deg);
+        }
+
+        .filter-content {
+            display: none;
+            margin-top: 1rem;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        .filter-content.visible {
+            display: block;
+        }
+
+        .filter-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .filter-label {
+            font-size: 0.8rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .filter-input {
+            padding: 0.75rem 1rem;
+            font-size: 0.9rem;
+            border: 1px solid var(--surface-light);
+            border-radius: 8px;
+            background: var(--background);
+            color: var(--text-primary);
+            transition: var(--transition);
+            font-family: inherit;
+        }
+
+        .filter-input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.1);
+        }
+
+        .filter-input::placeholder {
+            color: var(--text-secondary);
+            opacity: 0.6;
+        }
+
+        .filter-checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.75rem 0;
+        }
+
+        .filter-checkbox {
+            width: 18px;
+            height: 18px;
+            accent-color: var(--primary-color);
+            cursor: pointer;
+        }
+
+        .filter-checkbox-label {
+            font-size: 0.9rem;
+            color: var(--text-primary);
+            cursor: pointer;
+        }
+
         .search-button {
             width: 100%;
             padding: 1rem 2rem;
@@ -224,6 +329,12 @@
 
         .search-button:active {
             transform: translateY(0);
+        }
+
+        .search-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
         }
 
         /* Alert Messages */
@@ -554,6 +665,98 @@
                     >
                 </div>
                 
+                <!-- Advanced Filters -->
+                <div class="filter-section">
+                    <div class="filter-toggle" id="filterToggle">
+                        <span>🔧 Advanced Filters</span>
+                        <span class="filter-toggle-icon" id="filterToggleIcon">▼</span>
+                    </div>
+                    <div class="filter-content" id="filterContent">
+                        <div class="filter-row">
+                            <div class="filter-group">
+                                <label class="filter-label" for="n">Number of Results</label>
+                                <input 
+                                    type="number" 
+                                    id="n" 
+                                    name="n"
+                                    class="filter-input"
+                                    placeholder="15"
+                                    min="1"
+                                    max="50"
+                                    value="{{ filters_applied.n|default:'' }}"
+                                >
+                            </div>
+                            <div class="filter-group">
+                                <label class="filter-label" for="min_rating">Minimum Rating</label>
+                                <input 
+                                    type="number" 
+                                    id="min_rating" 
+                                    name="min_rating"
+                                    class="filter-input"
+                                    placeholder="0-10"
+                                    min="0"
+                                    max="10"
+                                    step="0.1"
+                                    value="{{ filters_applied.min_rating|default:'' }}"
+                                >
+                            </div>
+                        </div>
+                        <div class="filter-row">
+                            <div class="filter-group">
+                                <label class="filter-label" for="min_year">Year From</label>
+                                <input 
+                                    type="number" 
+                                    id="min_year" 
+                                    name="min_year"
+                                    class="filter-input"
+                                    placeholder="e.g. 2000"
+                                    min="1900"
+                                    max="2030"
+                                    value="{{ filters_applied.min_year|default:'' }}"
+                                >
+                            </div>
+                            <div class="filter-group">
+                                <label class="filter-label" for="max_year">Year To</label>
+                                <input 
+                                    type="number" 
+                                    id="max_year" 
+                                    name="max_year"
+                                    class="filter-input"
+                                    placeholder="e.g. 2024"
+                                    min="1900"
+                                    max="2030"
+                                    value="{{ filters_applied.max_year|default:'' }}"
+                                >
+                            </div>
+                        </div>
+                        <div class="filter-row">
+                            <div class="filter-group" style="flex: 2;">
+                                <label class="filter-label" for="genres">Genres (comma-separated)</label>
+                                <input 
+                                    type="text" 
+                                    id="genres" 
+                                    name="genres"
+                                    class="filter-input"
+                                    placeholder="e.g. Action, Comedy, Drama"
+                                    value="{{ filters_applied.genres|default:'' }}"
+                                >
+                            </div>
+                        </div>
+                        <div class="filter-checkbox-group">
+                            <input 
+                                type="checkbox" 
+                                id="exclude_same_company" 
+                                name="exclude_same_company"
+                                class="filter-checkbox"
+                                {% if filters_applied.exclude_same_company %}checked{% endif %}
+                            >
+                            <label class="filter-checkbox-label" for="exclude_same_company">
+                                Exclude movies from the same production company
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                
                 <button type="submit" class="search-button" id="searchButton">
                     Get Recommendations
                 </button>
@@ -677,6 +880,14 @@
                     $(this).val(ui.item.value);
                     return false;
                 }
+            });
+
+            // Filter toggle functionality
+            $('#filterToggle').on('click', function() {
+                var content = $('#filterContent');
+                var icon = $('#filterToggleIcon');
+                content.toggleClass('visible');
+                icon.toggleClass('expanded');
             });
 
             // Form submission with loading state
