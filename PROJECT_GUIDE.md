@@ -777,6 +777,81 @@ curl "http://localhost:8000/api/health/"
 
 ---
 
+#### 5. Movie Recommendations
+
+**Endpoint:** `GET /api/recommend/`
+
+**Description:** Get movie recommendations with advanced filtering
+
+**Parameters:**
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| movie_title | string | Yes | Movie title to base recommendations on |
+| n | integer | No | Number of recommendations (default: 15) |
+| min_year | integer | No | Minimum release year |
+| max_year | integer | No | Maximum release year |
+| genres | string | No | Comma-separated list of genres (e.g., "Action,Adventure") |
+| min_rating | float | No | Minimum rating (0-10) |
+| exclude_same_company | boolean | No | Exclude movies from the same production company (true/false) |
+
+**Example Request:**
+```bash
+curl "http://localhost:8000/api/recommend/?movie_title=Inception&n=10&min_rating=7.0&genres=Action,Adventure"
+```
+
+**Example Response (Model Loaded):**
+```json
+{
+  "loading": false,
+  "query_movie": "Inception",
+  "source_movie": {
+    "production": "Warner Bros. Pictures",
+    "rating": "8.8/10",
+    "genres": "Action, Adventure, Sci-Fi"
+  },
+  "recommendations": [
+    {
+      "title": "Interstellar",
+      "release_date": "2014-11-07",
+      "production": "Paramount Pictures",
+      "genres": "Adventure, Drama, Sci-Fi",
+      "rating": "8.6/10",
+      "votes": "2,800,000",
+      "similarity_score": "0.923",
+      "imdb_id": "tt0816692",
+      "poster_url": "https://image.tmdb.org/t/p/w500/poster.jpg",
+      "google_link": "https://www.google.com/search?q=Interstellar+movie",
+      "imdb_link": "https://www.imdb.com/title/tt0816692"
+    }
+  ]
+}
+```
+
+**Example Response (Model Loading):**
+```json
+{
+  "loading": true,
+  "progress": 45,
+  "status": "loading"
+}
+```
+
+**Example Response (Movie Not Found):**
+```json
+{
+  "loading": false,
+  "error": "Movie 'Nonexistent Movie' not found",
+  "suggestions": ["The Matrix", "The Matrix Reloaded"]
+}
+```
+
+**Status Codes:**
+- `200 OK` - Recommendations returned successfully
+- `400 Bad Request` - Missing required parameters
+- `500 Internal Server Error` - Server error
+
+---
+
 ## 💻 Command Reference
 
 ### Virtual Environment

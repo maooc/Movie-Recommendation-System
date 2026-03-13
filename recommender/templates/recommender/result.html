@@ -431,9 +431,47 @@
             {{ source_movie.production }} | {{ source_movie.rating }} | {{ source_movie.genres }}
         </p>
         {% endif %}
+        
+        <!-- Filters Applied -->
+        {% if filters %}
+        <div style="max-width: 800px; margin: 1.5rem auto 0; padding: 1rem; background: rgba(99, 102, 241, 0.1); border-radius: var(--border-radius); border: 1px solid rgba(99, 102, 241, 0.2);">
+            <h3 style="font-size: 1rem; font-weight: 600; margin-bottom: 0.75rem; color: var(--text-primary);">Filters Applied</h3>
+            <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+                {% if filters.n != 15 %}
+                <span style="padding: 0.25rem 0.75rem; background: var(--surface); border-radius: 20px; font-size: 0.875rem; color: var(--text-secondary);">Results: {{ filters.n }}</span>
+                {% endif %}
+                {% if filters.min_rating %}
+                <span style="padding: 0.25rem 0.75rem; background: var(--surface); border-radius: 20px; font-size: 0.875rem; color: var(--text-secondary);">Min Rating: {{ filters.min_rating }}</span>
+                {% endif %}
+                {% if filters.min_year %}
+                <span style="padding: 0.25rem 0.75rem; background: var(--surface); border-radius: 20px; font-size: 0.875rem; color: var(--text-secondary);">From: {{ filters.min_year }}</span>
+                {% endif %}
+                {% if filters.max_year %}
+                <span style="padding: 0.25rem 0.75rem; background: var(--surface); border-radius: 20px; font-size: 0.875rem; color: var(--text-secondary);">To: {{ filters.max_year }}</span>
+                {% endif %}
+                {% if filters.genres %}
+                <span style="padding: 0.25rem 0.75rem; background: var(--surface); border-radius: 20px; font-size: 0.875rem; color: var(--text-secondary);">Genres: {{ filters.genres }}</span>
+                {% endif %}
+                {% if filters.exclude_same_company %}
+                <span style="padding: 0.25rem 0.75rem; background: var(--surface); border-radius: 20px; font-size: 0.875rem; color: var(--text-secondary);">Exclude same company</span>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+        
         <p class="results-subtitle">
             We found {{ total_recommendations|default:"15" }} amazing recommendations for you
         </p>
+        
+        <!-- Filtering Notice -->
+        {% if requested_n and total_recommendations < requested_n %}
+        <div style="max-width: 800px; margin: 1rem auto 0; padding: 1rem; background: rgba(255, 193, 7, 0.1); border-radius: var(--border-radius); border: 1px solid rgba(255, 193, 7, 0.3);">
+            <p style="color: #ffd700; font-size: 0.9rem;">
+                <strong>Notice:</strong> We found {{ total_recommendations }} recommendations instead of the requested {{ requested_n }}. 
+                This may be due to your filtering criteria being too strict. Consider adjusting your filters for more results.
+            </p>
+        </div>
+        {% endif %}
     </div>
 
     <!-- Main Content -->
@@ -483,7 +521,12 @@
         <div class="no-results">
             <div class="no-results-icon">😕</div>
             <h2>No recommendations found</h2>
-            <p>We couldn't find any recommendations for this movie. Please try another one.</p>
+            <p>We couldn't find any recommendations matching your criteria.</p>
+            {% if filters %}
+            <p style="margin-top: 1rem; color: var(--text-secondary); font-size: 0.9rem;">
+                Try adjusting your filters, such as lowering the minimum rating or expanding the year range.
+            </p>
+            {% endif %}
         </div>
         {% endif %}
     </main>
