@@ -3,19 +3,23 @@ Advanced Movie Recommendation System - Inference Engine
 Optimized for TMDB Movies Dataset 2023 (930K+ movies)
 """
 
+import sys
+import os
+from pathlib import Path
+
+# Add parent directory to path to import from recommender module
+sys.path.append(str(Path(__file__).parent.parent))
+
+from recommender.engine import MovieRecommender as CoreMovieRecommender
+
 import pandas as pd
 import numpy as np
-from scipy.sparse import load_npz
-import pickle
-import json
-from pathlib import Path
 from typing import List, Dict, Optional
-from difflib import get_close_matches
 import warnings
 warnings.filterwarnings('ignore')
 
 
-class MovieRecommender:
+class MovieRecommender(CoreMovieRecommender):
     def __init__(self, model_dir='./models'):
         """
         Initialize recommender with trained models
@@ -23,52 +27,14 @@ class MovieRecommender:
         Args:
             model_dir: Directory containing trained model artifacts
         """
-        self.model_dir = Path(model_dir)
-        self.metadata = None
-        self.similarity_matrix = None
-        self.title_to_idx = None
-        self.config = None
-        self.load_models()
+        super().__init__(model_dir=model_dir)
     
     def load_models(self):
-        """Load all model artifacts"""
+        """Load all model artifacts with custom logging"""
         print("🎬 Loading TMDB Movie Recommendation Engine...")
-        
-        # Load metadata
-        self.metadata = pd.read_parquet(self.model_dir / 'movie_metadata.parquet')
-        
-        # Load similarity matrix
-        if (self.model_dir / 'similarity_matrix.npz').exists():
-            print("Loading sparse similarity matrix...")
-            self.similarity_matrix = load_npz(self.model_dir / 'similarity_matrix.npz').toarray()
-        else:
-            print("Loading dense similarity matrix...")
-            self.similarity_matrix = np.load(self.model_dir / 'similarity_matrix.npy')
-        
-        # Load title mapping
-        with open(self.model_dir / 'title_to_idx.json', 'r') as f:
-            self.title_to_idx = json.load(f)
-        
-        # Load config
-        with open(self.model_dir / 'config.json', 'r') as f:
-            self.config = json.load(f)
-        
+        super()._load_models()
         print(f"✅ Loaded {self.config['n_movies']:,} movies from {self.config.get('dataset', 'dataset')}")
         print(f"   Model ready for inference!")
-    
-    def find_movie(self, title: str, threshold: float = 0.6) -> Optional[str]:
-        """
-        Fuzzy search for movie title
-        
-        Args:
-            title: Movie title to search
-            threshold: Similarity threshold (0-1)
-        
-        Returns:
-            Best matching title or None
-        """
-        matches = get_close_matches(title, self.title_to_idx.keys(), n=1, cutoff=threshold)
-        return matches[0] if matches else None
     
     def get_movie_details(self, movie_title: str) -> Dict:
         """Get detailed information about a movie"""
@@ -117,122 +83,44 @@ class MovieRecommender:
         Returns:
             Dictionary with recommendations and metadata
         """
-        # Find exact or closest match
-        matched_title = self.find_movie(movie_title)
-        if not matched_title:
-            suggestions = self.search_movies(movie_title, n=5)
-            return {
-                'error': f"Movie '{movie_title}' not found",
-                'suggestions': suggestions if suggestions else "Try different spelling or search by partial title"
+        # Use core implementation
+        result = super().get_recommendations(
+            movie_title,
+            n=n_recommendations,
+            min_year=min_year,
+            max_year=max_year,
+            genres=genres,
+            min_rating=min_rating,
+            exclude_same_company=exclude_same_company
+        )
+        
+        # Add rank to recommendations
+        if 'recommendations' in result:
+            for i, rec in enumerate(result['recommendations'], 1):
+                rec['rank'] = i
+                # Add tmdb_id if available
+                idx = self.title_to_idx.get(rec['title'])
+                if idx is not None:
+                    movie = self.metadata.iloc[idx]
+                    if hasattr(movie, 'id'):
+                        rec['tmdb_id'] = int(movie['id'])
+                # Rename google_link to google_search for consistency
+                if 'google_link' in rec:
+                    rec['google_search'] = rec.pop('google_link')
+        
+        # Add query_details for compatibility
+        if 'source_movie' in result:
+            result['query_details'] = {
+                'production': result['source_movie']['production'],
+                'genres': result['source_movie']['genres'].split(', ') if isinstance(result['source_movie']['genres'], str) else result['source_movie']['genres'],
+                'rating': result['source_movie']['rating'],
+                'release_date': None  # Not available in core result
             }
         
-        if matched_title != movie_title:
-            print(f"📌 Found closest match: '{matched_title}'")
+        if 'recommendations' in result:
+            result['total_recommendations'] = len(result['recommendations'])
         
-        # Get movie index
-        movie_idx = self.title_to_idx[matched_title]
-        source_movie = self.metadata.iloc[movie_idx]
-        
-        # Get similarity scores
-        sim_scores = list(enumerate(self.similarity_matrix[movie_idx]))
-        sim_scores = sorted(sim_scores, key=lambda x: x[1], reverse=True)
-        
-        # Exclude the input movie itself
-        sim_scores = sim_scores[1:]
-        
-        # Apply filters
-        recommendations = []
-        source_company = source_movie['primary_company']
-        
-        for idx, score in sim_scores:
-            if len(recommendations) >= n_recommendations:
-                break
-            
-            movie = self.metadata.iloc[idx]
-            
-            # Year filter
-            if min_year or max_year:
-                try:
-                    release_str = str(movie['release_date'])
-                    if len(release_str) >= 4:
-                        year = int(release_str.split('-')[-1]) if '-' in release_str else int(release_str[:4])
-                        if min_year and year < min_year:
-                            continue
-                        if max_year and year > max_year:
-                            continue
-                except:
-                    continue
-            
-            # Rating filter
-            if min_rating and movie['vote_average'] < min_rating:
-                continue
-            
-            # Genre filter
-            if genres:
-                movie_genres = movie['genres'] if isinstance(movie['genres'], list) else []
-                movie_genres_lower = [g.lower().replace(' ', '') for g in movie_genres]
-                genres_lower = [g.lower().replace(' ', '') for g in genres]
-                if not any(g in movie_genres_lower for g in genres_lower):
-                    continue
-            
-            # Company filter
-            if exclude_same_company and movie['primary_company'] == source_company:
-                continue
-            
-            # Build recommendation entry
-            recommendations.append({
-                'rank': len(recommendations) + 1,
-                'title': movie['title'],
-                'production': movie['primary_company'] if pd.notna(movie['primary_company']) else 'N/A',
-                'release_date': movie['release_date'],
-                'genres': movie['genres'] if isinstance(movie['genres'], list) else [],
-                'rating': f"{movie['vote_average']:.1f}/10",
-                'votes': f"{movie['vote_count']:,}",
-                'similarity_score': float(score),
-                'tmdb_id': int(movie['id']),
-                'imdb_id': movie['imdb_id'] if pd.notna(movie['imdb_id']) else None,
-                'poster_url': f"https://image.tmdb.org/t/p/w500{movie['poster_path']}" if pd.notna(movie['poster_path']) else None,
-                'google_search': f"https://www.google.com/search?q={'+'.join(movie['title'].split())}+movie",
-                'imdb_link': f"https://www.imdb.com/title/{movie['imdb_id']}" if pd.notna(movie['imdb_id']) else None
-            })
-        
-        return {
-            'query_movie': matched_title,
-            'query_details': {
-                'production': source_movie['primary_company'],
-                'genres': source_movie['genres'] if isinstance(source_movie['genres'], list) else [],
-                'rating': f"{source_movie['vote_average']:.1f}/10",
-                'release_date': source_movie['release_date']
-            },
-            'total_recommendations': len(recommendations),
-            'recommendations': recommendations
-        }
-    
-    def search_movies(self, query: str, n: int = 10, min_rating: float = None) -> List[str]:
-        """
-        Search for movies by partial title match
-        
-        Args:
-            query: Search query
-            n: Number of results
-            min_rating: Minimum rating filter
-        
-        Returns:
-            List of matching movie titles
-        """
-        query_lower = query.lower()
-        matches = []
-        
-        for title in self.title_to_idx.keys():
-            if query_lower in title.lower():
-                if min_rating:
-                    idx = self.title_to_idx[title]
-                    rating = self.metadata.iloc[idx]['vote_average']
-                    if rating < min_rating:
-                        continue
-                matches.append(title)
-        
-        return matches[:n]
+        return result
     
     def get_top_rated(self, n: int = 10, min_votes: int = 1000, genres: List[str] = None) -> List[Dict]:
         """
@@ -296,7 +184,12 @@ class MovieRecommender:
             return {'error': f"Movie '{movie_title}' not found"}
         
         movie_idx = self.title_to_idx[matched_title]
-        sim_to_query = self.similarity_matrix[movie_idx]
+        
+        # Get similarity scores
+        if hasattr(self.similarity_matrix, 'toarray'):
+            sim_to_query = self.similarity_matrix[movie_idx].toarray()[0]
+        else:
+            sim_to_query = self.similarity_matrix[movie_idx]
         
         selected = []
         candidates = list(range(len(self.metadata)))
@@ -312,7 +205,10 @@ class MovieRecommender:
                 relevance = sim_to_query[candidate]
                 
                 if selected:
-                    max_sim = max(self.similarity_matrix[candidate][s] for s in selected)
+                    if hasattr(self.similarity_matrix, 'toarray'):
+                        max_sim = max(self.similarity_matrix[candidate, s] for s in selected)
+                    else:
+                        max_sim = max(self.similarity_matrix[candidate][s] for s in selected)
                 else:
                     max_sim = 0
                 
@@ -366,12 +262,12 @@ class MovieRecommender:
         print(f"{'='*100}\n")
         
         for rec in results['recommendations']:
-            score_str = f" [Similarity: {rec['similarity_score']:.3f}]" if show_scores else ""
-            genres_str = ", ".join(rec['genres'][:3]) if rec['genres'] else 'N/A'
+            score_str = f" [Similarity: {rec.get('similarity_score', 0):.3f}]" if show_scores else ""
+            genres_str = ", ".join(rec.get('genres', [])[:3]) if isinstance(rec.get('genres'), list) else rec.get('genres', 'N/A')
             
-            print(f"{rec['rank']:2d}. {rec['title']}")
-            print(f"    ⭐ {rec['rating']} ({rec['votes']} votes) | 📅 {rec['release_date']}")
-            print(f"    🎭 {genres_str} | 🏢 {rec['production']}{score_str}")
+            print(f"{rec.get('rank', 0):2d}. {rec['title']}")
+            print(f"    ⭐ {rec['rating']} ({rec.get('votes', 'N/A')} votes) | 📅 {rec.get('release_date', 'Unknown')}")
+            print(f"    🎭 {genres_str} | 🏢 {rec.get('production', 'Unknown')}{score_str}")
             
             if rec.get('imdb_link'):
                 print(f"    🔗 {rec['imdb_link']}")

@@ -7,16 +7,14 @@ import os
 import threading
 from pathlib import Path
 from typing import Dict, List, Optional
-from difflib import get_close_matches
 
-import pandas as pd
-import numpy as np
-from scipy.sparse import load_npz
-import json
 from django.conf import settings
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.views.decorators.http import require_http_methods
+from django.core.cache import cache
+
+from recommender.engine import MovieRecommender
 
 logger = logging.getLogger(__name__)
 
@@ -26,119 +24,6 @@ _MODEL_LOADING = False
 _MODEL_LOAD_PROGRESS = 0
 _LOADING_THREAD = None
 _LOAD_ERROR = None
-
-
-class MovieRecommender:
-    """Integrated recommender system matching training/infer.py logic"""
-    
-    def __init__(self, model_dir='models', progress_callback=None):
-        """Initialize with trained model directory"""
-        self.model_dir = Path(model_dir)
-        self.metadata = None
-        self.similarity_matrix = None
-        self.title_to_idx = None
-        self.config = None
-        self._load_models(progress_callback)
-    
-    def _load_models(self, progress_callback=None):
-        """Load all model artifacts with progress tracking"""
-        global _MODEL_LOAD_PROGRESS
-        logger.info(f"Loading models from {self.model_dir}...")
-        
-        # Load metadata (25%)
-        if progress_callback:
-            progress_callback(10)
-        self.metadata = pd.read_parquet(self.model_dir / 'movie_metadata.parquet')
-        if progress_callback:
-            progress_callback(25)
-        
-        # Load similarity matrix (sparse or dense) (50%)
-        if progress_callback:
-            progress_callback(40)
-        if (self.model_dir / 'similarity_matrix.npz').exists():
-            self.similarity_matrix = load_npz(self.model_dir / 'similarity_matrix.npz').toarray()
-        else:
-            self.similarity_matrix = np.load(self.model_dir / 'similarity_matrix.npy')
-        if progress_callback:
-            progress_callback(65)
-        
-        # Load title mapping (75%)
-        with open(self.model_dir / 'title_to_idx.json', 'r') as f:
-            self.title_to_idx = json.load(f)
-        if progress_callback:
-            progress_callback(80)
-        
-        # Load config (100%)
-        with open(self.model_dir / 'config.json', 'r') as f:
-            self.config = json.load(f)
-        if progress_callback:
-            progress_callback(100)
-        
-        logger.info(f"Loaded {self.config['n_movies']:,} movies successfully")
-    
-    def find_movie(self, title: str) -> Optional[str]:
-        """Find closest matching movie title"""
-        matches = get_close_matches(title, self.title_to_idx.keys(), n=1, cutoff=0.6)
-        return matches[0] if matches else None
-    
-    def search_movies(self, query: str, n: int = 20) -> List[str]:
-        """Search movies by partial title"""
-        query_lower = query.lower()
-        return [title for title in self.title_to_idx.keys() 
-                if query_lower in title.lower()][:n]
-    
-    def get_recommendations(
-        self,
-        movie_title: str,
-        n: int = 15,
-        min_rating: float = None
-    ) -> Dict:
-        """Get movie recommendations with optional filtering"""
-        matched_title = self.find_movie(movie_title)
-        if not matched_title:
-            return {'error': f"Movie '{movie_title}' not found", 'suggestions': self.search_movies(movie_title, 5)}
-        
-        movie_idx = self.title_to_idx[matched_title]
-        source_movie = self.metadata.iloc[movie_idx]
-        
-        # Get similarity scores
-        sim_scores = list(enumerate(self.similarity_matrix[movie_idx]))
-        sim_scores = sorted(sim_scores, key=lambda x: x[1], reverse=True)[1:]  # Exclude self
-        
-        recommendations = []
-        for idx, score in sim_scores:
-            if len(recommendations) >= n:
-                break
-            
-            movie = self.metadata.iloc[idx]
-            
-            # Rating filter
-            if min_rating and movie['vote_average'] < min_rating:
-                continue
-            
-            recommendations.append({
-                'title': movie['title'],
-                'release_date': movie['release_date'] if pd.notna(movie['release_date']) else 'Unknown',
-                'production': movie['primary_company'] if pd.notna(movie['primary_company']) else 'Unknown',
-                'genres': ', '.join(movie['genres'][:3]) if isinstance(movie['genres'], list) else 'N/A',
-                'rating': f"{movie['vote_average']:.1f}/10" if pd.notna(movie['vote_average']) else 'N/A',
-                'votes': f"{movie['vote_count']:,}" if pd.notna(movie['vote_count']) else 'N/A',
-                'similarity_score': f"{score:.3f}",
-                'imdb_id': movie['imdb_id'] if pd.notna(movie['imdb_id']) else None,
-                'poster_url': f"https://image.tmdb.org/t/p/w500{movie['poster_path']}" if pd.notna(movie['poster_path']) else None,
-                'google_link': f"https://www.google.com/search?q={'+'.join(movie['title'].split())}+movie",
-                'imdb_link': f"https://www.imdb.com/title/{movie['imdb_id']}" if pd.notna(movie['imdb_id']) else None
-            })
-        
-        return {
-            'query_movie': matched_title,
-            'source_movie': {
-                'production': source_movie['primary_company'] if pd.notna(source_movie['primary_company']) else 'Unknown',
-                'rating': f"{source_movie['vote_average']:.1f}/10" if pd.notna(source_movie['vote_average']) else 'N/A',
-                'genres': ', '.join(source_movie['genres'][:3]) if isinstance(source_movie['genres'], list) else 'N/A'
-            },
-            'recommendations': recommendations
-        }
 
 
 def _load_model_in_background():
@@ -251,8 +136,42 @@ def main(request):
             }
         )
     
+    # Get filtering parameters
+    try:
+        n = int(request.POST.get('n', 15))
+    except ValueError:
+        n = 15
+    
+    try:
+        min_year = int(request.POST.get('min_year', '')) if request.POST.get('min_year', '').strip() else None
+    except ValueError:
+        min_year = None
+    
+    try:
+        max_year = int(request.POST.get('max_year', '')) if request.POST.get('max_year', '').strip() else None
+    except ValueError:
+        max_year = None
+    
+    genres = request.POST.get('genres', '').strip()
+    genres_list = [g.strip() for g in genres.split(',')] if genres else None
+    
+    try:
+        min_rating = float(request.POST.get('min_rating', '')) if request.POST.get('min_rating', '').strip() else None
+    except ValueError:
+        min_rating = None
+    
+    exclude_same_company = request.POST.get('exclude_same_company', '').lower() == 'true'
+    
     # Get recommendations
-    result = recommender.get_recommendations(movie_name, n=15)
+    result = recommender.get_recommendations(
+        movie_name,
+        n=n,
+        min_year=min_year,
+        max_year=max_year,
+        genres=genres_list,
+        min_rating=min_rating,
+        exclude_same_company=exclude_same_company
+    )
     
     if 'error' in result:
         return render(
@@ -276,6 +195,15 @@ def main(request):
             'source_movie': result['source_movie'],
             'recommended_movies': result['recommendations'],
             'total_recommendations': len(result['recommendations']),
+            'requested_n': n,
+            'filters': {
+                'n': n,
+                'min_year': min_year,
+                'max_year': max_year,
+                'genres': genres,
+                'min_rating': min_rating,
+                'exclude_same_company': exclude_same_company
+            }
         }
     )
 
@@ -358,3 +286,92 @@ def health_check(request):
             'status': 'unhealthy',
             'error': str(e)
         }, status=503)
+
+
+@require_http_methods(["GET"])
+def api_recommend(request):
+    """API endpoint for movie recommendations with filtering"""
+    global _RECOMMENDER, _MODEL_LOADING, _MODEL_LOAD_PROGRESS, _LOAD_ERROR
+    
+    # Start loading if not already started
+    _start_model_loading()
+    
+    # Check model status
+    if _LOAD_ERROR:
+        return JsonResponse({
+            'error': _LOAD_ERROR,
+            'loading': False
+        }, status=500)
+    elif _RECOMMENDER is None:
+        return JsonResponse({
+            'loading': True,
+            'progress': _MODEL_LOAD_PROGRESS,
+            'status': 'loading'
+        })
+    
+    # Get parameters
+    movie_title = request.GET.get('movie_title', '').strip()
+    if not movie_title:
+        return JsonResponse({
+            'error': 'movie_title parameter is required'
+        }, status=400)
+    
+    # Get filtering parameters
+    try:
+        n = int(request.GET.get('n', 15))
+    except ValueError:
+        n = 15
+    
+    try:
+        min_year = int(request.GET.get('min_year', '')) if request.GET.get('min_year', '').strip() else None
+    except ValueError:
+        min_year = None
+    
+    try:
+        max_year = int(request.GET.get('max_year', '')) if request.GET.get('max_year', '').strip() else None
+    except ValueError:
+        max_year = None
+    
+    genres = request.GET.get('genres', '').strip()
+    genres_list = [g.strip() for g in genres.split(',')] if genres else None
+    
+    try:
+        min_rating = float(request.GET.get('min_rating', '')) if request.GET.get('min_rating', '').strip() else None
+    except ValueError:
+        min_rating = None
+    
+    exclude_same_company = request.GET.get('exclude_same_company', '').lower() == 'true'
+    
+    # Generate cache key based on all parameters
+    cache_key = f"recommend:{movie_title}:{n}:{min_year}:{max_year}:{genres}:{min_rating}:{exclude_same_company}"
+    
+    # Try to get from cache
+    cached_result = cache.get(cache_key)
+    if cached_result:
+        return JsonResponse(cached_result)
+    
+    # Get recommendations
+    try:
+        result = _RECOMMENDER.get_recommendations(
+            movie_title,
+            n=n,
+            min_year=min_year,
+            max_year=max_year,
+            genres=genres_list,
+            min_rating=min_rating,
+            exclude_same_company=exclude_same_company
+        )
+        
+        # Add loading status to response
+        result['loading'] = False
+        
+        # Cache the result for 30 minutes
+        cache.set(cache_key, result, 1800)
+        
+        return JsonResponse(result)
+    except Exception as e:
+        logger.error(f"Recommendation error: {e}")
+        return JsonResponse({
+            'error': str(e),
+            'loading': False
+        }, status=500)
