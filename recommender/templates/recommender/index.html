@@ -554,6 +554,73 @@
                     >
                 </div>
                 
+                <!-- Advanced Filter Options -->
+                <div class="filter-options" style="margin: 1.5rem 0;">
+                    <h3 style="margin-bottom: 1rem; font-size: 1rem; font-weight: 600; color: var(--text-primary);">Advanced Filters</h3>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                        <div>
+                            <label style="display: block; font-size: 0.875rem; margin-bottom: 0.5rem; color: var(--text-secondary);">Recommendations</label>
+                            <input 
+                                type="number" 
+                                name="n" 
+                                min="1" 
+                                max="50" 
+                                value="15"
+                                style="width: 100%; padding: 0.75rem; border: 2px solid var(--surface-light); border-radius: var(--border-radius); background: var(--background); color: var(--text-primary); font-family: inherit;"
+                            >
+                        </div>
+                        <div>
+                            <label style="display: block; font-size: 0.875rem; margin-bottom: 0.5rem; color: var(--text-secondary);">Min Rating</label>
+                            <input 
+                                type="number" 
+                                name="min_rating" 
+                                min="0" 
+                                max="10" 
+                                step="0.1"
+                                style="width: 100%; padding: 0.75rem; border: 2px solid var(--surface-light); border-radius: var(--border-radius); background: var(--background); color: var(--text-primary); font-family: inherit;"
+                            >
+                        </div>
+                        <div>
+                            <label style="display: block; font-size: 0.875rem; margin-bottom: 0.5rem; color: var(--text-secondary);">Min Year</label>
+                            <input 
+                                type="number" 
+                                name="min_year" 
+                                min="1900" 
+                                max="2026"
+                                style="width: 100%; padding: 0.75rem; border: 2px solid var(--surface-light); border-radius: var(--border-radius); background: var(--background); color: var(--text-primary); font-family: inherit;"
+                            >
+                        </div>
+                        <div>
+                            <label style="display: block; font-size: 0.875rem; margin-bottom: 0.5rem; color: var(--text-secondary);">Max Year</label>
+                            <input 
+                                type="number" 
+                                name="max_year" 
+                                min="1900" 
+                                max="2026"
+                                style="width: 100%; padding: 0.75rem; border: 2px solid var(--surface-light); border-radius: var(--border-radius); background: var(--background); color: var(--text-primary); font-family: inherit;"
+                            >
+                        </div>
+                        <div style="grid-column: 1 / -1;">
+                            <label style="display: block; font-size: 0.875rem; margin-bottom: 0.5rem; color: var(--text-secondary);">Genres (comma separated)</label>
+                            <input 
+                                type="text" 
+                                name="genres" 
+                                placeholder="Action, Adventure, Sci-Fi"
+                                style="width: 100%; padding: 0.75rem; border: 2px solid var(--surface-light); border-radius: var(--border-radius); background: var(--background); color: var(--text-primary); font-family: inherit;"
+                            >
+                        </div>
+                        <div style="grid-column: 1 / -1; display: flex; align-items: center;">
+                            <input 
+                                type="checkbox" 
+                                id="exclude_same_company" 
+                                name="exclude_same_company"
+                                style="margin-right: 0.5rem;"
+                            >
+                            <label for="exclude_same_company" style="font-size: 0.875rem; color: var(--text-secondary);">Exclude movies from the same production company</label>
+                        </div>
+                    </div>
+                </div>
+                
                 <button type="submit" class="search-button" id="searchButton">
                     Get Recommendations
                 </button>
